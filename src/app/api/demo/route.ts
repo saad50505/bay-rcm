@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
 
-// Contact / demo-request submissions are delivered with Resend (https://resend.com).
-// All secrets live on the server only — see .env.example for the required vars:
-//   RESEND_API_KEY, CONTACT_FORM_FROM_EMAIL, CONTACT_FORM_TO_EMAILS
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Contact / demo-request submissions are delivered with Brevo transactional
+// email (https://www.brevo.com) via its REST API. All secrets live on the
+// server only — see .env.example for the required vars:
+//   BREVO_API_KEY, CONTACT_FORM_FROM_NAME, CONTACT_FORM_FROM_EMAIL, CONTACT_FORM_TO_EMAILS
+const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
 type DemoPayload = {
   fname?: string;
@@ -101,15 +101,17 @@ export async function POST(request: Request) {
   }
 
   // 5) Ensure the service is configured.
-  const from = process.env.CONTACT_FORM_FROM_EMAIL;
+  const apiKey = process.env.BREVO_API_KEY;
+  const fromName = process.env.CONTACT_FORM_FROM_NAME || "Website Form";
+  const fromEmail = process.env.CONTACT_FORM_FROM_EMAIL;
   const recipients = (process.env.CONTACT_FORM_TO_EMAILS ?? "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
 
-  if (!process.env.RESEND_API_KEY || !from || recipients.length === 0) {
+  if (!apiKey || !fromEmail || recipients.length === 0) {
     console.error(
-      "Email service not configured: set RESEND_API_KEY, CONTACT_FORM_FROM_EMAIL and CONTACT_FORM_TO_EMAILS."
+      "Email service not configured: set BREVO_API_KEY, CONTACT_FORM_FROM_EMAIL and CONTACT_FORM_TO_EMAILS."
     );
     return NextResponse.json(
       { error: "Email service is not configured." },
@@ -142,6 +144,7 @@ export async function POST(request: Request) {
     ["Preferred time slot", slot],
     ["Claims audit requested", data.audit ? "Yes" : "No"],
     ["Message", note || "—"],
+    ["Page URL", pageUrl],
     ["Submitted", `${submittedAtPT} (PT)`],
   ];
 
@@ -177,19 +180,41 @@ export async function POST(request: Request) {
       )}.</p>
     </div>`;
 
-  // 7) Send. `from` is your verified domain; `replyTo` is the visitor so a reply
-  //    goes straight to them — the visitor address is never used as the sender.
-  const { error } = await resend.emails.send({
-    from,
-    to: recipients,
-    replyTo: email,
-    subject: `New contact form submission — ${fullName}`,
-    text,
-    html,
-  });
+  // 7) Send via Brevo. `sender` is your verified Brevo sender; `replyTo` is the
+  //    visitor so a reply goes straight to them — the visitor address is never
+  //    used as the sender. The API key is sent in a server-side header only.
+  let response: Response;
+  try {
+    response = await fetch(BREVO_ENDPOINT, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": apiKey,
+      },
+      body: JSON.stringify({
+        sender: { name: fromName, email: fromEmail },
+        to: recipients.map((addr) => ({ email: addr })),
+        replyTo: { email, name: fullName },
+        subject: "New contact form submission",
+        htmlContent: html,
+        textContent: text,
+      }),
+    });
+  } catch (err) {
+    console.error("Brevo request failed:", err);
+    return NextResponse.json(
+      { error: "Failed to send your request. Please try again." },
+      { status: 502 }
+    );
+  }
 
-  if (error) {
-    console.error("Resend failed to send contact submission:", error);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error(
+      `Brevo failed to send contact submission (HTTP ${response.status}):`,
+      detail
+    );
     return NextResponse.json(
       { error: "Failed to send your request. Please try again." },
       { status: 502 }
