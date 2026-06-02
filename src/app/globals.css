@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* The Bay RCM pages bring their own design tokens and base styles
+   (see the <style> block inside each page component). We only keep
+   Tailwind's reset here so those page styles stay in full control. */
