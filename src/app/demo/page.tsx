@@ -447,6 +447,12 @@ const HTML = `
 
         <form id="demo-form" novalidate>
 
+          <!-- Honeypot: hidden from real users; bots that fill it are rejected -->
+          <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:0;height:0;overflow:hidden;">
+            <label for="company">Company (leave this field empty)</label>
+            <input type="text" id="company" name="company" tabindex="-1" autocomplete="off"/>
+          </div>
+
           <!-- Name row -->
           <div class="form-row">
             <div class="form-group no-mb">
@@ -671,10 +677,15 @@ export default function Demo() {
             slot: selectedSlot,
             note: val("note"),
             audit: root.querySelector<HTMLInputElement>("#audit")?.checked ?? false,
+            company: val("company"), // honeypot
+            pageUrl: window.location.href,
           }),
         });
 
-        if (!res.ok) throw new Error("Request failed");
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error || "Request failed");
+        }
 
         const formState = root.querySelector<HTMLElement>("#form-state");
         if (formState) formState.style.display = "none";
@@ -687,9 +698,11 @@ export default function Demo() {
             `${fname}${lname ? " " + lname : ""}, we'll send a calendar invite to <strong>${email}</strong> along with a short prep checklist. ` +
             `Our team will begin the claims audit for <strong>${practice}</strong> before your call.`;
         }
-      } catch {
+      } catch (err) {
         showError(
-          "Something went wrong sending your request. Please try again or email us directly."
+          err instanceof Error && err.message
+            ? err.message
+            : "Something went wrong sending your request. Please try again or email us directly."
         );
         if (btn && btnHtml !== undefined) {
           btn.innerHTML = btnHtml;
