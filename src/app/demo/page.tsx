@@ -623,7 +623,7 @@ export default function Demo() {
     };
 
     const form = root.querySelector<HTMLFormElement>("#demo-form");
-    const onSubmit = (e: Event) => {
+    const onSubmit = async (e: Event) => {
       e.preventDefault();
       const fname = val("fname");
       const email = val("email");
@@ -646,18 +646,40 @@ export default function Demo() {
       }
 
       const btn = root.querySelector<HTMLButtonElement>("#submit-btn");
+      const btnHtml = btn?.innerHTML;
       if (btn) {
         btn.innerHTML =
           '<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="22 22" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 9 9" to="360 9 9" dur="0.7s" repeatCount="indefinite"/></circle></svg> Sending…';
         btn.disabled = true;
       }
 
-      setTimeout(() => {
+      const lname = val("lname");
+
+      try {
+        const res = await fetch("/api/demo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fname,
+            lname,
+            email,
+            phone: val("phone"),
+            practice,
+            providers: root.querySelector<HTMLSelectElement>("#providers")?.value ?? "",
+            specialty,
+            ehr: root.querySelector<HTMLSelectElement>("#ehr")?.value ?? "",
+            slot: selectedSlot,
+            note: val("note"),
+            audit: root.querySelector<HTMLInputElement>("#audit")?.checked ?? false,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Request failed");
+
         const formState = root.querySelector<HTMLElement>("#form-state");
         if (formState) formState.style.display = "none";
         const s = root.querySelector<HTMLElement>("#success-state");
         if (s) s.style.display = "flex";
-        const lname = val("lname");
         const meta = root.querySelector<HTMLElement>("#success-meta");
         if (meta) {
           meta.innerHTML =
@@ -665,7 +687,15 @@ export default function Demo() {
             `${fname}${lname ? " " + lname : ""}, we'll send a calendar invite to <strong>${email}</strong> along with a short prep checklist. ` +
             `Our team will begin the claims audit for <strong>${practice}</strong> before your call.`;
         }
-      }, 1200);
+      } catch {
+        showError(
+          "Something went wrong sending your request. Please try again or email us directly."
+        );
+        if (btn && btnHtml !== undefined) {
+          btn.innerHTML = btnHtml;
+          btn.disabled = false;
+        }
+      }
     };
     form?.addEventListener("submit", onSubmit);
 
