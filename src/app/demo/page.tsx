@@ -632,13 +632,16 @@ export default function Demo() {
     const onSubmit = async (e: Event) => {
       e.preventDefault();
       const fname = val("fname");
+      const lname = val("lname");
       const email = val("email");
       const practice = val("practice");
       const specialty = root.querySelector<HTMLSelectElement>("#specialty")?.value ?? "";
+      const phone = val("phone");
 
-      if (!fname || !email || !practice || !specialty || !selectedSlot) {
+      if (!fname || !lname || !email || !practice || !specialty || !selectedSlot) {
         const missing: string[] = [];
         if (!fname) missing.push("first name");
+        if (!lname) missing.push("last name");
         if (!email) missing.push("work email");
         if (!practice) missing.push("practice name");
         if (!specialty) missing.push("specialty");
@@ -650,6 +653,11 @@ export default function Demo() {
         showError("Please enter a valid email address.");
         return;
       }
+      // Phone is optional, but if provided it must look like a real number.
+      if (phone && !/^[+]?[\d\s().-]{7,20}$/.test(phone)) {
+        showError("Please enter a valid phone number, or leave it blank.");
+        return;
+      }
 
       const btn = root.querySelector<HTMLButtonElement>("#submit-btn");
       const btnHtml = btn?.innerHTML;
@@ -659,8 +667,6 @@ export default function Demo() {
         btn.disabled = true;
       }
 
-      const lname = val("lname");
-
       try {
         const res = await fetch("/api/demo", {
           method: "POST",
@@ -669,7 +675,7 @@ export default function Demo() {
             fname,
             lname,
             email,
-            phone: val("phone"),
+            phone,
             practice,
             providers: root.querySelector<HTMLSelectElement>("#providers")?.value ?? "",
             specialty,

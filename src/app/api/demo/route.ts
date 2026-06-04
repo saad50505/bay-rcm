@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
-// Contact / demo-request submissions are delivered with Brevo transactional
-// email (https://www.brevo.com) via its REST API. All secrets live on the
-// server only — see .env.example for the required vars:
-//   BREVO_API_KEY, CONTACT_FORM_FROM_NAME, CONTACT_FORM_FROM_EMAIL, CONTACT_FORM_TO_EMAILS
-const BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
+// Contact / demo-request submissions are delivered over Gmail SMTP via
+// Nodemailer — free, no activation, and a single credential reaches every
+// recipient at once. All secrets live on the server only; required env vars:
+//   GMAIL_USER             the Gmail address you send FROM
+//   GMAIL_APP_PASSWORD     a 16-char Google App Password (NOT your login password)
+//   DEMO_TO_EMAILS         comma-separated recipient inboxes (one or many)
+//   CONTACT_FORM_FROM_NAME (optional) display name shown as the sender
+//
+// Nodemailer needs the Node.js runtime (not Edge).
+export const runtime = "nodejs";
 
 type DemoPayload = {
   fname?: string;
@@ -90,7 +96,7 @@ export async function POST(request: Request) {
   const note = clamp(data.note?.trim() ?? "", 5000);
 
   // 4) Validation (mirrors the client so the endpoint can't be bypassed).
-  if (!fname || !email || !practice || !specialty || !slot) {
+  if (!fname || !lname || !email || !practice || !specialty || !slot) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
   }
   if (!EMAIL_RE.test(email)) {
@@ -101,17 +107,17 @@ export async function POST(request: Request) {
   }
 
   // 5) Ensure the service is configured.
-  const apiKey = process.env.BREVO_API_KEY;
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
   const fromName = process.env.CONTACT_FORM_FROM_NAME || "Website Form";
-  const fromEmail = process.env.CONTACT_FORM_FROM_EMAIL;
-  const recipients = (process.env.CONTACT_FORM_TO_EMAILS ?? "")
+  const recipients = (process.env.DEMO_TO_EMAILS ?? "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
 
-  if (!apiKey || !fromEmail || recipients.length === 0) {
+  if (!gmailUser || !gmailPass || recipients.length === 0) {
     console.error(
-      "Email service not configured: set BREVO_API_KEY, CONTACT_FORM_FROM_EMAIL and CONTACT_FORM_TO_EMAILS."
+      "Email service not configured: set GMAIL_USER, GMAIL_APP_PASSWORD and DEMO_TO_EMAILS."
     );
     return NextResponse.json(
       { error: "Email service is not configured." },
@@ -180,41 +186,25 @@ export async function POST(request: Request) {
       )}.</p>
     </div>`;
 
-  // 7) Send via Brevo. `sender` is your verified Brevo sender; `replyTo` is the
-  //    visitor so a reply goes straight to them — the visitor address is never
-  //    used as the sender. The API key is sent in a server-side header only.
-  let response: Response;
+  // 7) Send over Gmail SMTP. A single message goes to every recipient at once.
+  //    `from` must be your Gmail address (Gmail rewrites it anyway); `replyTo`
+  //    is the visitor so hitting reply goes straight to them.
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: gmailUser, pass: gmailPass },
+  });
+
   try {
-    response = await fetch(BREVO_ENDPOINT, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "api-key": apiKey,
-      },
-      body: JSON.stringify({
-        sender: { name: fromName, email: fromEmail },
-        to: recipients.map((addr) => ({ email: addr })),
-        replyTo: { email, name: fullName },
-        subject: "New contact form submission",
-        htmlContent: html,
-        textContent: text,
-      }),
+    await transporter.sendMail({
+      from: { name: fromName, address: gmailUser },
+      to: recipients,
+      replyTo: { name: fullName, address: email },
+      subject: "New contact form submission",
+      text,
+      html,
     });
   } catch (err) {
-    console.error("Brevo request failed:", err);
-    return NextResponse.json(
-      { error: "Failed to send your request. Please try again." },
-      { status: 502 }
-    );
-  }
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.error(
-      `Brevo failed to send contact submission (HTTP ${response.status}):`,
-      detail
-    );
+    console.error("Gmail SMTP send failed:", err);
     return NextResponse.json(
       { error: "Failed to send your request. Please try again." },
       { status: 502 }
