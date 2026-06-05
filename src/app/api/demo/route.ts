@@ -1,16 +1,27 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 
-// Contact / demo-request submissions are delivered over Gmail SMTP via
-// Nodemailer — free, no activation, and a single credential reaches every
-// recipient at once. All secrets live on the server only; required env vars:
-//   GMAIL_USER             the Gmail address you send FROM
-//   GMAIL_APP_PASSWORD     a 16-char Google App Password (NOT your login password)
-//   DEMO_TO_EMAILS         comma-separated recipient inboxes (one or many)
-//   CONTACT_FORM_FROM_NAME (optional) display name shown as the sender
+// Contact / demo-request submissions are delivered through Resend's HTTP API.
+// No SMTP login and no personal email account — just one API key. All secrets
+// live on the server only; required env vars:
+//   RESEND_API_KEY    your Resend API key (starts with "re_")
+//   RESEND_FROM_EMAIL the verified sender address. Until you verify your own
+//                     domain in Resend, this must be "onboarding@resend.dev".
+//   DEMO_TO_EMAILS    comma-separated recipient inboxes (one or many)
+//   CONTACT_FORM_FROM_NAME (optional) fallback display name for the sender
 //
-// Nodemailer needs the Node.js runtime (not Edge).
+// NOTE — Resend test mode: with no verified domain, Resend ONLY delivers to
+// the email address of your Resend account. Verify a domain at
+// resend.com/domains to send to other recipients.
+//
+// IMPORTANT — how "From" works: email providers forbid sending *as* the
+// visitor's address (that would be spoofing). So the visitor's NAME is shown
+// as the sender and their email goes in Reply-To — hitting "Reply" on the
+// booking reaches the visitor directly.
+//
+// We call Resend over plain fetch (no SDK dependency). Runs on Node.js.
 export const runtime = "nodejs";
+
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 type DemoPayload = {
   fname?: string;
@@ -107,17 +118,17 @@ export async function POST(request: Request) {
   }
 
   // 5) Ensure the service is configured.
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
-  const fromName = process.env.CONTACT_FORM_FROM_NAME || "Website Form";
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const fallbackName = process.env.CONTACT_FORM_FROM_NAME || "Website Form";
   const recipients = (process.env.DEMO_TO_EMAILS ?? "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
 
-  if (!gmailUser || !gmailPass || recipients.length === 0) {
+  if (!resendApiKey || recipients.length === 0) {
     console.error(
-      "Email service not configured: set GMAIL_USER, GMAIL_APP_PASSWORD and DEMO_TO_EMAILS."
+      "Email service not configured: set RESEND_API_KEY and DEMO_TO_EMAILS."
     );
     return NextResponse.json(
       { error: "Email service is not configured." },
@@ -186,25 +197,39 @@ export async function POST(request: Request) {
       )}.</p>
     </div>`;
 
-  // 7) Send over Gmail SMTP. A single message goes to every recipient at once.
-  //    `from` must be your Gmail address (Gmail rewrites it anyway); `replyTo`
-  //    is the visitor so hitting reply goes straight to them.
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: gmailUser, pass: gmailPass },
-  });
+  // 7) Send via Resend. One message goes to every recipient at once.
+  //    `from` address must be a verified sender (the visitor's NAME is shown,
+  //    but the address is ours — providers forbid spoofing the visitor).
+  //    `reply_to` is the visitor, so hitting reply goes straight to them.
+  const fromDisplay = fullName ? `${fullName} (via ${fallbackName})` : fallbackName;
 
   try {
-    await transporter.sendMail({
-      from: { name: fromName, address: gmailUser },
-      to: recipients,
-      replyTo: { name: fullName, address: email },
-      subject: "New contact form submission",
-      text,
-      html,
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${fromDisplay} <${fromEmail}>`,
+        to: recipients,
+        reply_to: email,
+        subject: `New demo booking — ${fullName}`,
+        text,
+        html,
+      }),
     });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      console.error(`Resend send failed (${res.status}):`, detail);
+      return NextResponse.json(
+        { error: "Failed to send your request. Please try again." },
+        { status: 502 }
+      );
+    }
   } catch (err) {
-    console.error("Gmail SMTP send failed:", err);
+    console.error("Resend request error:", err);
     return NextResponse.json(
       { error: "Failed to send your request. Please try again." },
       { status: 502 }
