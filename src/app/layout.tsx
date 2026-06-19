@@ -1,10 +1,67 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const SITE_URL = "https://bayrcm.com";
+const SITE_NAME = "Bay RCM";
+const TITLE = "Bay RCM — Revenue Cycle Management for Medical Practices";
+const DESCRIPTION =
+  "Bay RCM delivers end-to-end revenue cycle management for clinics and health systems — certified billers, clean claims, denial management, and structured AR follow-up that keeps your practice financially healthy.";
+
 export const metadata: Metadata = {
-  title: "Bay RCM — Revenue Cycle Management",
-  description:
-    "End-to-end revenue cycle management for clinics and health systems — certified billers, clean claims, and structured follow-up.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: TITLE,
+    template: "%s | Bay RCM",
+  },
+  description: DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    "revenue cycle management",
+    "medical billing",
+    "RCM services",
+    "medical coding",
+    "denial management",
+    "accounts receivable follow-up",
+    "eligibility verification",
+    "prior authorization",
+    "healthcare billing company",
+    "clean claims",
+  ],
+  authors: [{ name: SITE_NAME }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  category: "Healthcare",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0B1628",
 };
 
 export default function RootLayout({
