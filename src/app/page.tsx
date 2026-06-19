@@ -26,7 +26,7 @@ const CSS = `
 
   /* ── Reset ──────────────────────────────────────────────────── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; overflow-x: hidden; }
   body {
     font-family: var(--sans);
     background: var(--white);
@@ -558,8 +558,13 @@ const CSS = `
     .spec-grid { grid-template-columns: repeat(2, 1fr); }
     .footer-grid { grid-template-columns: 1fr 1fr; }
     .process-row { grid-template-columns: 1fr; gap: 48px; }
-    #results .reveal > div[style*="grid-template-columns:repeat(3"] { grid-template-columns: 1fr 1fr !important; }
-    #pricing .reveal > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; gap: 48px !important; }
+    /* Results: dense 3-up benchmark grid → 2-up. (Grid lives ON .reveal,
+       so target the element itself, not a child div.) */
+    #results .reveal[style*="repeat(3,1fr)"] { grid-template-columns: 1fr 1fr !important; }
+    /* Pricing split → stacked */
+    #pricing .reveal[style*="grid-template-columns:1fr 1fr"] {
+      grid-template-columns: 1fr !important; gap: 48px !important;
+    }
   }
   @media (max-width: 768px) {
     nav { padding: 0 20px; }
@@ -569,7 +574,51 @@ const CSS = `
     .services-grid { grid-template-columns: 1fr; }
     .spec-grid { grid-template-columns: repeat(2, 1fr); }
     .footer-grid { grid-template-columns: 1fr 1fr; }
-    .hero-stats { gap: 32px; }
+    .hero { padding: 116px 0 72px; }
+    .hero-stats { gap: 28px 32px; margin-top: 48px; padding-top: 36px; }
+    .section-header { margin-bottom: 44px; }
+    /* Collapse all dense, inline-styled grids to a single column */
+    #results .reveal[style*="repeat(3,1fr)"],
+    #results .reveal[style*="1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+    #results .reveal[style*="1fr 1fr 1fr"] {
+      gap: 28px !important; padding: 32px 24px !important;
+    }
+    /* The "our commitment" cell spans 2 cols on desktop — reset it */
+    #results .reveal[style*="1fr 1fr 1fr"] > div[style*="grid-column:1/3"] {
+      grid-column: auto !important;
+    }
+    /* Benchmark cells carry heavy padding — tighten on phones */
+    #results .reveal[style*="repeat(3,1fr)"] > div { padding: 32px 26px !important; }
+  }
+  @media (max-width: 600px) {
+    .container { padding: 0 18px; }
+    section { padding: 60px 0; }
+    .hero { padding: 104px 0 64px; }
+    /* Center the hero eyebrow, headline & description on phones */
+    .hero-eyebrow,
+    .hero-headline { text-align: center; }
+    .hero-headline { max-width: 100%; }
+    .hero-sub {
+      font-size: 16px; text-align: center;
+      max-width: 100%; margin-left: auto; margin-right: auto;
+    }
+    .hero-actions { justify-content: center; }
+    .spec-grid { grid-template-columns: 1fr 1fr; }
+    .footer-grid { grid-template-columns: 1fr; gap: 36px; }
+    .footer-bottom { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .footer-legal { gap: 18px; flex-wrap: wrap; }
+    .trust-inner { gap: 14px 24px; }
+    .cta-section { padding: 80px 0; }
+    /* Hero CTAs stack full-width so they're easy to tap */
+    .hero-actions { gap: 12px; }
+    .hero-actions .btn-hero,
+    .hero-actions .btn-hero-outline { width: 100%; justify-content: center; }
+    /* Hero stat tiles two-up instead of an awkward wrap */
+    .hero-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  }
+  @media (max-width: 380px) {
+    .spec-grid { grid-template-columns: 1fr; }
+    .hero-stats { grid-template-columns: 1fr; }
   }
 `;
 
